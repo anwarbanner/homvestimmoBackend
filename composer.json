@@ -50,8 +50,7 @@
         ],
         "test": [
             "@php artisan config:clear --ansi @no_additional_args",
-            "@putenv APP_ENV=testing",
-            "@php artisan test"
+            "env -u APP_ENV -u DB_CONNECTION -u DB_DATABASE -u DB_HOST -u DB_PORT -u DB_USERNAME -u DB_PASSWORD -u CACHE_STORE -u SESSION_DRIVER -u QUEUE_CONNECTION -u BROADCAST_CONNECTION -u MAIL_MAILER php artisan test"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
