@@ -1,0 +1,97 @@
+services:
+  # L'Application Laravel (PHP-FPM)
+  app:
+    build: .
+    container_name: homvest-app
+    restart: unless-stopped
+    env_file: .env  # <--- AJOUTEZ CECI pour charger toutes les variables
+    volumes:
+      - ./:/var/www
+      # vendor/ contient des milliers de petits fichiers PHP : les laisser
+      # sur le bind-mount Windows -> WSL2 rend chaque requete tres lente
+      # (opcache re-stat chaque fichier). Ce volume nomme "shadow" le
+      # vendor du bind-mount avec celui construit dans l'image (rapide).
+      - vendor_data:/var/www/vendor
+      - bootstrap_cache_data:/var/www/bootstrap/cache
+      - storage_framework_data:/var/www/storage/framework
+    networks:
+      - homvest-network
+
+  worker:
+    build: .
+    container_name: homvest-worker
+    restart: unless-stopped
+    env_file: .env  # <--- AJOUTEZ CECI AUSSI
+    command: php artisan queue:work --verbose --tries=3
+    volumes:
+      - ./:/var/www
+      - vendor_data:/var/www/vendor
+      - bootstrap_cache_data:/var/www/bootstrap/cache
+      - storage_framework_data:/var/www/storage/framework
+    depends_on:
+      - app
+      - db
+      - redis
+    networks:
+      - homvest-network
+  # Le Serveur Web (Nginx)
+  nginx:
+    image: nginx:alpine
+    container_name: homvest-nginx
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx:/etc/nginx/conf.d
+    depends_on:
+      - app
+    networks:
+      - homvest-network
+
+  # Base de données (PostgreSQL)
+  db:
+    image: postgres:15-alpine
+    container_name: homvest-db
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - homvest-network
+
+  # Cache & Queues (Redis)
+  redis:
+    image: redis:alpine
+    container_name: homvest-redis
+    networks:
+      - homvest-network
+
+  # Stockage Objet (MinIO) - Optionnel mais recommandé pour les photos
+  minio:
+    image: minio/minio
+    container_name: homvest-minio
+    ports:
+      - "9000:9000" # API S3 (nécessaire pour que le navigateur charge les images)
+      - "9001:9001" # Console UI
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - homvest-network
+
+networks:
+  homvest-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  minio_data:
+  vendor_data:
+  bootstrap_cache_data:
+  storage_framework_data:

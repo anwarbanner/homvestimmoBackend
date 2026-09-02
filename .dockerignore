@@ -1,0 +1,22 @@
+.git
+.gitignore
+.gitattributes
+node_modules
+vendor
+tests
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+# lien symbolique cree par `artisan storage:link`, invalide cote hote Windows
+public/storage
+.env
+.env.example
+.editorconfig
+.npmrc
+README.md
+docker
+!docker/php-fpm/www.conf
+!docker/entrypoint.sh
+docker-compose.yml
+Dockerfile
