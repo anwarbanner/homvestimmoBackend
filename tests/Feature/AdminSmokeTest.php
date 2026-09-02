@@ -53,7 +53,6 @@ class AdminSmokeTest extends TestCase
 
     public function test_admin_can_access_dashboard(): void
     {
-        config(['app.env' => 'local']);
         $this->actingAs($this->makeAdmin());
 
         $this->get('/admin')->assertSuccessful();
@@ -61,7 +60,6 @@ class AdminSmokeTest extends TestCase
 
     public function test_admin_can_list_properties(): void
     {
-        config(['app.env' => 'local']);
         $this->actingAs($this->makeAdmin());
         Property::factory()->count(3)->create();
 

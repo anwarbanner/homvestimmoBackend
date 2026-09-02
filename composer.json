@@ -50,6 +50,7 @@
         ],
         "test": [
             "@php artisan config:clear --ansi @no_additional_args",
+            "@putenv APP_ENV=testing",
             "@php artisan test"
         ],
         "post-autoload-dump": [
