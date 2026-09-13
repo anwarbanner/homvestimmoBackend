@@ -3,7 +3,7 @@ FROM php:8.4-fpm
 # 1. Dépendances Système
 RUN apt-get update && apt-get install -y \
     git curl libpng-dev libonig-dev libxml2-dev zip unzip libpq-dev \
-    libzip-dev autoconf build-essential libicu-dev \
+    libzip-dev autoconf build-essential libicu-dev gosu \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 2. Extensions PHP (avec Redis et OpCache pour la performance)
