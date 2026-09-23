@@ -4,17 +4,22 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PropertyResource\Pages;
 use App\Filament\Resources\PropertyResource\RelationManagers\ImagesRelationManager;
+use App\Jobs\PublishPropertyToFacebook;
 use App\Models\Property;
+use App\Models\SocialPost;
+use App\Services\SocialMedia\PropertyCaptionGenerator;
+use Filament\Tables\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Get;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\IconColumn;
@@ -39,7 +44,7 @@ class PropertyResource extends Resource
         return $form
             ->schema([
                 TextInput::make('title')->label('Titre')->required()->maxLength(255),
-                TextInput::make('reference')->label('Référence')->required()->unique(ignoreRecord: true),
+                TextInput::make('reference')->label('Référence')->disabled()->dehydrated(false)->placeholder('Générée automatiquement'),
                 Select::make('type')
                     ->label('Type')
                     ->options([
@@ -56,7 +61,15 @@ class PropertyResource extends Resource
                     ->options([
                         'sale' => 'Vente',
                         'rent' => 'Location',
-                    ])->required(),
+                    ])->required()->live(),
+                Select::make('rental_term')
+                    ->label('Durée de location')
+                    ->options([
+                        'short_term' => 'Courte durée',
+                        'long_term' => 'Longue durée',
+                    ])
+                    ->visible(fn (Get $get) => $get('transaction_type') === 'rent')
+                    ->required(fn (Get $get) => $get('transaction_type') === 'rent'),
                 Select::make('status')
                     ->label('Statut')
                     ->options([
@@ -73,8 +86,13 @@ class PropertyResource extends Resource
                 TextInput::make('latitude')->label('Latitude')->numeric(),
                 TextInput::make('longitude')->label('Longitude')->numeric(),
                 Toggle::make('featured')->label('Mis en avant'),
-                DateTimePicker::make('published_at')->label('Publié le'),
-                RichEditor::make('description')->label('Description')->columnSpanFull(),
+                Toggle::make('publish_to_social')
+                    ->label('Publier sur les réseaux sociaux')
+                    ->helperText('Si activé et que le statut est "Publié", le bien sera automatiquement partagé sur Facebook, puis sur Instagram une fois Facebook publié.')
+                    ->default(true)
+                    ->visible(fn (string $operation): bool => $operation === 'create'),
+                DateTimePicker::make('published_at')->label('Publié le')->disabled()->dehydrated(false)->placeholder('Définie automatiquement à la première publication'),
+                Textarea::make('description')->label('Description')->rows(5)->columnSpanFull(),
                 FileUpload::make('new_images')
                     ->label('Images')
                     ->disk('s3')
@@ -85,6 +103,8 @@ class PropertyResource extends Resource
                     ->reorderable()
                     ->appendFiles()
                     ->dehydrated(false)
+                    ->visible(fn (string $operation): bool => $operation === 'create')
+                    ->helperText('Une fois le bien créé, gérez les images depuis l\'onglet "Images" ci-dessous.')
                     ->columnSpanFull(),
             ]);
     }
@@ -113,6 +133,41 @@ class PropertyResource extends Resource
             ])
             ->actions([
                 EditAction::make(),
+                Action::make('publierFacebook')
+                    ->label('Publier sur Facebook')
+                    ->icon('heroicon-o-share')
+                    ->visible(fn (Property $record) => $record->status === 'published')
+                    ->requiresConfirmation()
+                    ->action(function (Property $record) {
+                        $alreadyActive = SocialPost::where('property_id', $record->id)
+                            ->where('platform', 'facebook')
+                            ->whereIn('status', ['queued', 'published'])
+                            ->exists();
+
+                        if ($alreadyActive) {
+                            Notification::make()
+                                ->title('Déjà publié ou en cours')
+                                ->body('Ce bien a déjà une publication Facebook active. Utilisez "Republier" depuis Publications si besoin.')
+                                ->warning()
+                                ->send();
+
+                            return;
+                        }
+
+                        $socialPost = SocialPost::create([
+                            'property_id' => $record->id,
+                            'platform' => 'facebook',
+                            'status' => 'queued',
+                            'caption' => PropertyCaptionGenerator::make($record),
+                        ]);
+
+                        PublishPropertyToFacebook::dispatch($record->id, $socialPost->id);
+
+                        Notification::make()
+                            ->title('Publication mise en file d\'attente')
+                            ->success()
+                            ->send();
+                    }),
             ])
             ->bulkActions([
                 BulkActionGroup::make([

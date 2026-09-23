@@ -32,5 +32,17 @@
         <env name="PULSE_ENABLED" value="false" force="true"/>
         <env name="TELESCOPE_ENABLED" value="false" force="true"/>
         <env name="NIGHTWATCH_ENABLED" value="false" force="true"/>
+        <!--
+            Never let real social-media credentials leak into a test run:
+            the container's env_file already carries real Facebook/Instagram
+            tokens, and a test that forgets to Queue::fake()/Http::fake()
+            once caused a real post on the production Facebook Page. See
+            tests/TestCase.php's Http::preventStrayRequests() for the other
+            half of this guard.
+        -->
+        <env name="FACEBOOK_PAGE_ID" value="test-page-id" force="true"/>
+        <env name="FACEBOOK_PAGE_TOKEN" value="test-page-token" force="true"/>
+        <env name="INSTAGRAM_BUSINESS_ACCOUNT_ID" value="test-ig-account-id" force="true"/>
+        <env name="INSTAGRAM_ACCESS_TOKEN" value="test-ig-token" force="true"/>
     </php>
 </phpunit>

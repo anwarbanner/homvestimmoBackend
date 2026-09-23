@@ -60,6 +60,7 @@ class PropertyController extends Controller
             'title' => $property->title,
             'type' => $property->type,
             'transactionType' => $property->transaction_type,
+            'rentalTerm' => $property->rental_term,
             'price' => (float) $property->price,
             'surface' => (float) $property->surface,
             'bedrooms' => $property->bedrooms,

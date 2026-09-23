@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'facebook' => [
+        'page_id' => env('FACEBOOK_PAGE_ID'),
+        'page_token' => env('FACEBOOK_PAGE_TOKEN'),
+    ],
+
+    'instagram' => [
+        'business_account_id' => env('INSTAGRAM_BUSINESS_ACCOUNT_ID'),
+        'access_token' => env('INSTAGRAM_ACCESS_TOKEN'),
+    ],
+
 ];

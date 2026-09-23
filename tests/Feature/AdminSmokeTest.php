@@ -15,7 +15,7 @@ class AdminSmokeTest extends TestCase
 
     protected function makeAdmin(): User
     {
-        return User::factory()->create([
+        return User::factory()->admin()->create([
             'email' => 'admin@gmail.com',
             'password' => bcrypt('12345678'),
         ]);
@@ -51,6 +51,27 @@ class AdminSmokeTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_a_user_without_the_admin_role_cannot_access_the_panel(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'no-role@gmail.com',
+            'password' => bcrypt('12345678'),
+        ]);
+
+        Livewire::test(Login::class)
+            ->fillForm([
+                'email' => 'no-role@gmail.com',
+                'password' => '12345678',
+            ])
+            ->call('authenticate')
+            ->assertHasFormErrors();
+
+        $this->assertGuest();
+
+        $this->actingAs($user);
+        $this->get('/admin')->assertForbidden();
+    }
+
     public function test_admin_can_access_dashboard(): void
     {
         $this->actingAs($this->makeAdmin());
@@ -73,7 +94,6 @@ class AdminSmokeTest extends TestCase
         Livewire::test(\App\Filament\Resources\PropertyResource\Pages\CreateProperty::class)
             ->fillForm([
                 'title' => 'Villa Test CRUD',
-                'reference' => 'REF-CRUD-001',
                 'type' => 'villa',
                 'transaction_type' => 'sale',
                 'status' => 'draft',
@@ -85,16 +105,20 @@ class AdminSmokeTest extends TestCase
             ->call('create')
             ->assertHasNoFormErrors();
 
+        // The "reference" field is disabled in the form and generated
+        // automatically by the model, not submitted by the admin.
         $this->assertDatabaseHas('properties', [
-            'reference' => 'REF-CRUD-001',
             'title' => 'Villa Test CRUD',
         ]);
+        $this->assertNotEmpty(Property::where('title', 'Villa Test CRUD')->first()->reference);
     }
 
     public function test_admin_can_update_property(): void
     {
         $this->actingAs($this->makeAdmin());
-        $property = Property::factory()->create(['title' => 'Old Title']);
+        // transaction_type is forced to "sale" so the conditionally required
+        // "rental_term" field isn't part of this unrelated smoke test.
+        $property = Property::factory()->create(['title' => 'Old Title', 'transaction_type' => 'sale']);
 
         Livewire::test(\App\Filament\Resources\PropertyResource\Pages\EditProperty::class, [
             'record' => $property->getRouteKey(),

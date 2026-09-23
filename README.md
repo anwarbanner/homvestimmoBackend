@@ -1,58 +1,63 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Homvest — Backend
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+API et back-office (admin) pour Homvest, une plateforme de gestion et publication de biens immobiliers (vente et location) à Marrakech. Le backend expose une API publique en lecture pour un frontend séparé, et un panel d'administration Filament pour gérer les biens, leurs images, et leur publication automatique sur Facebook et Instagram.
 
-## About Laravel
+Pour une analyse technique détaillée (architecture, pipeline de publication social media, points d'attention et pistes d'amélioration), voir **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Stack technique
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **Framework** : Laravel 13 (PHP 8.3+)
+- **Admin** : Filament 3
+- **Base de données** : PostgreSQL
+- **Queue / Cache** : Redis
+- **Stockage fichiers** : S3-compatible (MinIO en local)
+- **Permissions** : spatie/laravel-permission (installé, non branché — voir ARCHITECTURE.md)
+- **Conteneurisation** : Docker Compose (`app`, `worker`, `nginx`, `db`, `redis`, `minio`)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Démarrage rapide (Docker)
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+cp .env.example .env
+docker compose up -d --build
+docker compose exec app php artisan key:generate
+docker compose exec app php artisan migrate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+L'application est servie sur `http://localhost:8000`. `/` redirige vers `/admin`.
 
-## Contributing
+Pour créer un compte admin :
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+docker compose exec app php artisan tinker --execute="
+App\Models\User::create(['name' => 'Admin', 'email' => 'admin@example.com', 'password' => Illuminate\Support\Facades\Hash::make('password')]);
+"
+```
 
-## Code of Conduct
+N'importe quel utilisateur créé peut accéder au panel `/admin` (voir ARCHITECTURE.md — pas de restriction par rôle actuellement).
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Variables d'environnement clés
 
-## Security Vulnerabilities
+| Variable | Rôle |
+|---|---|
+| `AWS_*` | Connexion au disque S3/MinIO (stockage des images) |
+| `FACEBOOK_PAGE_ID` / `FACEBOOK_PAGE_TOKEN` | Publication automatique sur la Page Facebook |
+| `INSTAGRAM_BUSINESS_ACCOUNT_ID` / `INSTAGRAM_ACCESS_TOKEN` | Publication automatique sur Instagram (déclenchée après succès Facebook) |
+| `REDIS_QUEUE_RETRY_AFTER` | Timeout de visibilité de la queue Redis — doit rester **supérieur** au `$timeout` des jobs de publication (180s) pour éviter les doublons |
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Voir `.env.example` pour la liste complète.
 
-## License
+## Fonctionnalités principales
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- **Biens immobiliers** (`app/Filament/Resources/PropertyResource.php`) : CRUD complet, référence auto-générée, date de publication auto-définie, champ "durée de location" (courte/longue) conditionnel, upload d'images multiples.
+- **Publication automatique** : à la publication d'un bien (statut → "Publié"), une publication Facebook est déclenchée automatiquement ; une fois celle-ci réussie, Instagram est publié à son tour avec la même légende/images. Peut être désactivé au cas par cas via une case à cocher en création.
+- **Suppression en cascade** : supprimer un bien supprime aussi ses images sur le stockage S3/MinIO et déclenche la suppression du post Facebook associé.
+- **Suivi des publications** (`SocialPostResource`) : historique par plateforme, republier un post en échec, supprimer un post Facebook, vérifier/resynchroniser le statut réel via le bouton "Rafraîchir".
+- **API publique** (`routes/api.php`, `PropertyController`) : liste et détail des biens publiés, consommée par un frontend séparé (`FRONTEND_URL`).
+
+## Tests
+
+```bash
+docker compose exec app composer test
+```
+
+⚠️ **Ne jamais lancer `php artisan test` directement** (ni via `docker compose exec app php artisan test`). Ce projet injecte les vraies variables d'environnement (base de données, tokens Facebook/Instagram) dans le conteneur via `env_file`, et seul le script `composer test` les neutralise avant de lancer la suite. Cette règle a déjà causé deux incidents réels (perte de la base de données de dev, puis publication de faux posts sur la vraie Page Facebook) avant d'être corrigée — voir ARCHITECTURE.md.

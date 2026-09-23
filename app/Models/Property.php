@@ -11,6 +11,13 @@ class Property extends Model
 {
     use HasFactory;
 
+    /**
+     * Transient, non-persisted flag set by CreateProperty when the admin
+     * unchecks "Publier sur les réseaux sociaux" — read by PropertyObserver
+     * to skip the automatic Facebook/Instagram publish for this save only.
+     */
+    public bool $skipSocialPublish = false;
+
     protected $fillable = [
         'reference',
         'title',
@@ -18,6 +25,7 @@ class Property extends Model
         'description',
         'type',
         'transaction_type',
+        'rental_term',
         'price',
         'surface',
         'bedrooms',
@@ -44,13 +52,39 @@ class Property extends Model
         return $this->hasMany(PropertyImage::class);
     }
 
+    public function socialPosts(): HasMany
+    {
+        return $this->hasMany(SocialPost::class);
+    }
+
     protected static function booted(): void
     {
         static::creating(function (Property $property) {
             if (empty($property->slug)) {
                 $property->slug = static::uniqueSlugFrom($property->title);
             }
+
+            if (empty($property->reference)) {
+                $property->reference = static::nextReference();
+            }
         });
+
+        static::saving(function (Property $property) {
+            if ($property->status === 'published' && empty($property->published_at)) {
+                $property->published_at = now();
+            }
+        });
+    }
+
+    protected static function nextReference(): string
+    {
+        $next = static::query()->pluck('reference')->map(fn ($reference) => (int) $reference)->max() + 1;
+
+        while (static::where('reference', (string) $next)->exists()) {
+            $next++;
+        }
+
+        return (string) $next;
     }
 
     protected static function uniqueSlugFrom(string $title): string
